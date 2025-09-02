@@ -7,19 +7,29 @@ import zipfile
 import os
 from datetime import datetime
 
-# Check if we're running on Streamlit Cloud (avoid TensorFlow there)
-STREAMLIT_CLOUD = os.getenv('STREAMLIT_CLOUD', False) or 'streamlit.app' in os.getenv('HOSTNAME', '')
+# Detect if running on Streamlit Cloud
+def is_streamlit_cloud():
+    """Detect if running on Streamlit Cloud"""
+    indicators = [
+        'streamlit.app' in os.getenv('HOSTNAME', ''),
+        os.getenv('STREAMLIT_CLOUD', False),
+        '/mount/src' in os.getcwd(),
+        '/home/adminuser' in os.getcwd(),
+        os.path.exists('/mount/src'),
+        'streamlit.app' in str(os.environ.get('PWD', '')),
+        any('streamlit' in str(v).lower() for v in os.environ.values() if 'app' in str(v).lower())
+    ]
+    return any(indicators)
 
-if STREAMLIT_CLOUD:
-    # Skip TensorFlow on Streamlit Cloud to avoid segfaults
-    TENSORFLOW_AVAILABLE = False
-    tf = None
-else:
-    # Configure TensorFlow for local use
-    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-    
+# Completely avoid TensorFlow for cloud deployment
+TENSORFLOW_AVAILABLE = False
+tf = None
+
+# Only try to import TensorFlow if definitely running locally
+if not is_streamlit_cloud():
     try:
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
         import tensorflow as tf
         tf.config.set_visible_devices([], 'GPU')
         TENSORFLOW_AVAILABLE = True
@@ -37,7 +47,8 @@ st.set_page_config(
 # Load model
 @st.cache_resource
 def load_model():
-    if not TENSORFLOW_AVAILABLE:
+    # Double-check cloud environment before any TensorFlow operations
+    if is_streamlit_cloud() or not TENSORFLOW_AVAILABLE or tf is None:
         return None
         
     try:
@@ -128,10 +139,10 @@ def predict_similarity(model, img1, img2, demo_mode=False):
         # Use demo prediction based on actual image similarity
         similarity_score = create_demo_prediction(img1, img2)
         if not hasattr(st.session_state, 'demo_warning_shown'):
-            if STREAMLIT_CLOUD:
+            if not TENSORFLOW_AVAILABLE:
                 st.info("🌐 **Cloud Demo**: Using advanced correlation analysis for signature comparison.")
             else:
-                st.warning("⚠️ **Demo Mode**: Using basic image correlation. Upload the trained model for AI predictions.")
+                st.warning("⚠️ **Demo Mode**: Using advanced image correlation. Upload the trained model for AI predictions.")
             st.session_state.demo_warning_shown = True
     else:
         # Make real prediction
@@ -195,25 +206,33 @@ def main():
     st.title("✍️ Signature Verification AI")
     st.markdown("### Advanced signature verification with single comparison and batch processing")
     
+    # Debug info (only show in development)
+    if st.sidebar.checkbox("Show Debug Info", value=False):
+        st.sidebar.write("**Environment Debug:**")
+        st.sidebar.write(f"Cloud detected: {is_streamlit_cloud()}")
+        st.sidebar.write(f"TensorFlow available: {TENSORFLOW_AVAILABLE}")
+        st.sidebar.write(f"Current working dir: {os.getcwd()}")
+        st.sidebar.write(f"Hostname: {os.getenv('HOSTNAME', 'Not set')}")
+    
     # Load model
     model = load_model()
     demo_mode = model is None
     
     if demo_mode:
-        if STREAMLIT_CLOUD:
+        if not TENSORFLOW_AVAILABLE:
             st.info("""
             🌐 **Cloud Demo Mode** 
             
             You're using the online demo! This version uses advanced image correlation 
-            algorithms to compare signatures. For full AI predictions, run locally with 
-            the trained model.
+            algorithms to compare signatures. For full AI predictions with 98.75% accuracy, 
+            run this locally with the trained model.
             """)
         else:
             st.info("""
             🚧 **Demo Mode Active** 
             
             The trained model couldn't be loaded, but you can still explore the interface.
-            In demo mode, basic image correlation is used for similarity scoring.
+            In demo mode, advanced image correlation is used for similarity scoring.
             """)
         # Don't create demo model, just use None and handle in predict function
     

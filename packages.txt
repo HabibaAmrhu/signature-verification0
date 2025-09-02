@@ -1,0 +1,2 @@
+# System packages for Streamlit Cloud
+# Minimal packages only - no CUDA or GPU dependencies
