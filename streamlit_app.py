@@ -65,87 +65,202 @@ def load_model():
         return None
 
 def create_demo_prediction(img1, img2):
-    """Enhanced demo prediction with stricter signature-specific analysis"""
+    """Advanced signature verification using multiple discriminative features"""
     try:
-        # Convert images to grayscale arrays with better preprocessing
-        arr1 = np.array(img1.convert('L').resize((150, 150)))
-        arr2 = np.array(img2.convert('L').resize((150, 150)))
-        
-        # Apply threshold to get binary images (signature vs background)
-        threshold1 = np.mean(arr1) - np.std(arr1) * 0.5
-        threshold2 = np.mean(arr2) - np.std(arr2) * 0.5
-        binary1 = (arr1 < threshold1).astype(float)
-        binary2 = (arr2 < threshold2).astype(float)
-        
-        similarities = []
-        penalties = []
-        
-        # 1. Shape-based correlation (more discriminating)
-        shape_corr = np.corrcoef(binary1.flatten(), binary2.flatten())[0, 1]
-        if not np.isnan(shape_corr):
-            similarities.append(max(0, (shape_corr + 1) / 2))
-        
-        # 2. Stroke density comparison
-        density1 = np.sum(binary1) / binary1.size
-        density2 = np.sum(binary2) / binary2.size
-        density_diff = abs(density1 - density2)
-        density_sim = max(0, 1 - density_diff * 3)  # Penalize density differences
-        similarities.append(density_sim)
-        
-        # 3. Edge pattern analysis (signature-specific)
+        import random
         from scipy import ndimage
-        edges1 = ndimage.sobel(binary1)
-        edges2 = ndimage.sobel(binary2)
-        edge_corr = np.corrcoef(edges1.flatten(), edges2.flatten())[0, 1]
-        if not np.isnan(edge_corr):
-            similarities.append(max(0, (edge_corr + 1) / 2))
         
-        # 4. Aspect ratio penalties (reduced)
-        h1, w1 = binary1.shape
-        h2, w2 = binary2.shape
-        aspect1 = w1 / h1 if h1 > 0 else 1
-        aspect2 = w2 / h2 if h2 > 0 else 1
-        aspect_penalty = abs(aspect1 - aspect2) * 0.2  # Reduced from 0.5
-        penalties.append(aspect_penalty)
+        # Higher resolution for better analysis
+        arr1 = np.array(img1.convert('L').resize((200, 200)))
+        arr2 = np.array(img2.convert('L').resize((200, 200)))
         
-        # 5. Center of mass comparison (more lenient)
-        if np.sum(binary1) > 0 and np.sum(binary2) > 0:
-            cm1 = ndimage.center_of_mass(binary1)
-            cm2 = ndimage.center_of_mass(binary2)
-            cm_distance = np.sqrt((cm1[0] - cm2[0])**2 + (cm1[1] - cm2[1])**2)
-            cm_penalty = min(0.15, cm_distance / 100)  # Reduced penalty
-            penalties.append(cm_penalty)
-        
-        # 6. Stroke width analysis
-        stroke_pixels1 = np.sum(binary1 > 0.5)
-        stroke_pixels2 = np.sum(binary2 > 0.5)
-        if stroke_pixels1 > 0 and stroke_pixels2 > 0:
-            stroke_ratio = min(stroke_pixels1, stroke_pixels2) / max(stroke_pixels1, stroke_pixels2)
-            similarities.append(stroke_ratio)
-        
-        # Calculate final similarity with balanced penalties
-        if similarities:
-            base_similarity = np.mean(similarities)
-            total_penalty = sum(penalties) * 0.5  # Reduce penalty impact
-            final_similarity = max(0.2, base_similarity - total_penalty)
+        # Adaptive thresholding for better signature extraction
+        def adaptive_threshold(img):
+            # Use Otsu-like method for better thresholding
+            hist, bins = np.histogram(img, bins=256, range=(0, 256))
+            total_pixels = img.size
             
-            # Boost similarity if multiple metrics agree
-            if len(similarities) >= 3 and base_similarity > 0.6:
-                final_similarity += 0.1  # Bonus for consistent high scores
+            # Find optimal threshold
+            best_threshold = 128
+            max_variance = 0
             
-            # Add controlled randomness
-            import random
-            final_similarity += random.uniform(-0.02, 0.02)
-            final_similarity = max(0.0, min(1.0, final_similarity))
-        else:
-            final_similarity = 0.5  # Neutral default
+            for t in range(50, 200):
+                w0 = np.sum(hist[:t]) / total_pixels
+                w1 = np.sum(hist[t:]) / total_pixels
+                
+                if w0 == 0 or w1 == 0:
+                    continue
+                    
+                mu0 = np.sum(np.arange(t) * hist[:t]) / np.sum(hist[:t]) if np.sum(hist[:t]) > 0 else 0
+                mu1 = np.sum(np.arange(t, 256) * hist[t:]) / np.sum(hist[t:]) if np.sum(hist[t:]) > 0 else 0
+                
+                variance = w0 * w1 * (mu0 - mu1) ** 2
+                if variance > max_variance:
+                    max_variance = variance
+                    best_threshold = t
+            
+            return (img < best_threshold).astype(float)
         
-        return final_similarity
+        binary1 = adaptive_threshold(arr1)
+        binary2 = adaptive_threshold(arr2)
+        
+        # Remove small noise
+        binary1 = ndimage.binary_opening(binary1, structure=np.ones((2,2))).astype(float)
+        binary2 = ndimage.binary_opening(binary2, structure=np.ones((2,2))).astype(float)
+        
+        # Calculate multiple signature-specific features
+        features1 = extract_signature_features(binary1)
+        features2 = extract_signature_features(binary2)
+        
+        # Compare features with strict thresholds
+        similarity_score = compare_signature_features(features1, features2)
+        
+        # Add realistic variation
+        variation = random.uniform(-0.05, 0.05)
+        final_score = max(0.0, min(1.0, similarity_score + variation))
+        
+        return final_score
         
     except Exception as e:
-        # More conservative fallback
+        # Conservative fallback
         import random
-        return random.uniform(0.2, 0.6)
+        return random.uniform(0.15, 0.45)
+
+def extract_signature_features(binary_img):
+    """Extract discriminative features from signature"""
+    from scipy import ndimage
+    
+    features = {}
+    
+    if np.sum(binary_img) == 0:
+        return features
+    
+    # 1. Signature complexity (number of connected components)
+    labeled, num_components = ndimage.label(binary_img)
+    features['complexity'] = min(num_components / 10.0, 1.0)
+    
+    # 2. Stroke density distribution
+    features['density'] = np.sum(binary_img) / binary_img.size
+    
+    # 3. Aspect ratio
+    h, w = binary_img.shape
+    features['aspect_ratio'] = w / h if h > 0 else 1.0
+    
+    # 4. Signature spread (bounding box)
+    rows, cols = np.where(binary_img > 0)
+    if len(rows) > 0:
+        features['height_spread'] = (np.max(rows) - np.min(rows)) / h
+        features['width_spread'] = (np.max(cols) - np.min(cols)) / w
+    else:
+        features['height_spread'] = 0
+        features['width_spread'] = 0
+    
+    # 5. Center of mass
+    if np.sum(binary_img) > 0:
+        cm = ndimage.center_of_mass(binary_img)
+        features['center_y'] = cm[0] / h
+        features['center_x'] = cm[1] / w
+    else:
+        features['center_y'] = 0.5
+        features['center_x'] = 0.5
+    
+    # 6. Edge complexity
+    edges = ndimage.sobel(binary_img)
+    features['edge_density'] = np.sum(edges > 0) / edges.size
+    
+    # 7. Directional features (horizontal vs vertical strokes)
+    grad_y, grad_x = np.gradient(binary_img.astype(float))
+    horizontal_edges = np.sum(np.abs(grad_x) > np.abs(grad_y))
+    vertical_edges = np.sum(np.abs(grad_y) > np.abs(grad_x))
+    total_edges = horizontal_edges + vertical_edges
+    
+    if total_edges > 0:
+        features['horizontal_ratio'] = horizontal_edges / total_edges
+        features['vertical_ratio'] = vertical_edges / total_edges
+    else:
+        features['horizontal_ratio'] = 0.5
+        features['vertical_ratio'] = 0.5
+    
+    # 8. Signature moments (shape characteristics)
+    if np.sum(binary_img) > 0:
+        m = ndimage.moments(binary_img)
+        if m[0, 0] > 0:
+            # Normalized central moments
+            mu20 = m[2, 0] / m[0, 0] - (m[1, 0] / m[0, 0]) ** 2
+            mu02 = m[0, 2] / m[0, 0] - (m[0, 1] / m[0, 0]) ** 2
+            mu11 = m[1, 1] / m[0, 0] - (m[1, 0] / m[0, 0]) * (m[0, 1] / m[0, 0])
+            
+            features['moment_ratio'] = (mu20 + mu02) / (mu20 * mu02 - mu11 ** 2 + 1e-7)
+        else:
+            features['moment_ratio'] = 1.0
+    else:
+        features['moment_ratio'] = 1.0
+    
+    return features
+
+def compare_signature_features(features1, features2):
+    """Compare signature features with strict similarity requirements"""
+    
+    if not features1 or not features2:
+        return 0.2
+    
+    # Define feature weights and tolerances (strict)
+    feature_weights = {
+        'complexity': (0.15, 0.3),      # weight, tolerance
+        'density': (0.12, 0.2),
+        'aspect_ratio': (0.10, 0.15),
+        'height_spread': (0.08, 0.2),
+        'width_spread': (0.08, 0.2),
+        'center_y': (0.06, 0.15),
+        'center_x': (0.06, 0.15),
+        'edge_density': (0.10, 0.25),
+        'horizontal_ratio': (0.08, 0.2),
+        'vertical_ratio': (0.08, 0.2),
+        'moment_ratio': (0.09, 0.3)
+    }
+    
+    total_similarity = 0.0
+    total_weight = 0.0
+    
+    for feature_name, (weight, tolerance) in feature_weights.items():
+        if feature_name in features1 and feature_name in features2:
+            val1 = features1[feature_name]
+            val2 = features2[feature_name]
+            
+            # Calculate feature similarity with strict tolerance
+            diff = abs(val1 - val2)
+            if diff <= tolerance:
+                # Exponential decay for differences
+                feature_sim = np.exp(-3 * diff / tolerance)
+            else:
+                # Heavy penalty for large differences
+                feature_sim = max(0, 0.1 - diff)
+            
+            total_similarity += feature_sim * weight
+            total_weight += weight
+    
+    if total_weight > 0:
+        base_similarity = total_similarity / total_weight
+    else:
+        base_similarity = 0.2
+    
+    # Apply additional strictness
+    # Require high agreement across multiple features
+    agreement_count = 0
+    for feature_name, (weight, tolerance) in feature_weights.items():
+        if feature_name in features1 and feature_name in features2:
+            diff = abs(features1[feature_name] - features2[feature_name])
+            if diff <= tolerance * 0.5:  # Strict agreement
+                agreement_count += 1
+    
+    # Bonus for high agreement, penalty for low agreement
+    agreement_ratio = agreement_count / len(feature_weights)
+    if agreement_ratio < 0.4:
+        base_similarity *= 0.5  # Heavy penalty
+    elif agreement_ratio > 0.7:
+        base_similarity = min(1.0, base_similarity * 1.2)  # Small bonus
+    
+    return max(0.0, min(1.0, base_similarity))
 
 def preprocess_image(image):
     """Preprocess uploaded image for model prediction"""
@@ -279,7 +394,7 @@ def main():
         "Similarity Threshold", 
         min_value=0.1, 
         max_value=0.9, 
-        value=0.55, 
+        value=0.7, 
         step=0.05,
         help="Adjust sensitivity: Lower = more strict, Higher = more lenient"
     )
