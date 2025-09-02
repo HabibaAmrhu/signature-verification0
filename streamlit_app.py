@@ -199,26 +199,34 @@ def create_demo_prediction(img1, img2):
             agreement = 1.0 - np.std(similarities)
             boosted_score = base_score * (0.8 + 0.2 * agreement)
             
-            # Apply calibration based on score range
-            if boosted_score > 0.8:
-                # High similarity - likely same person
-                calibrated = 0.75 + (boosted_score - 0.8) * 1.25  # Scale to 0.75-1.0
-            elif boosted_score > 0.6:
-                # Medium similarity - possible same person
-                calibrated = 0.55 + (boosted_score - 0.6) * 1.0   # Scale to 0.55-0.75
+            # Apply much more conservative calibration
+            if boosted_score > 0.95:
+                # Extremely high similarity - definitely same person
+                calibrated = 0.85 + (boosted_score - 0.95) * 3.0  # Scale to 0.85-1.0
+            elif boosted_score > 0.85:
+                # Very high similarity - likely same person
+                calibrated = 0.70 + (boosted_score - 0.85) * 1.5  # Scale to 0.70-0.85
+            elif boosted_score > 0.70:
+                # High similarity - possible same person
+                calibrated = 0.55 + (boosted_score - 0.70) * 1.0  # Scale to 0.55-0.70
+            elif boosted_score > 0.50:
+                # Medium similarity - uncertain
+                calibrated = 0.35 + (boosted_score - 0.50) * 1.0  # Scale to 0.35-0.55
             else:
                 # Low similarity - likely different people
-                calibrated = boosted_score * 0.9  # Scale to 0.0-0.54
+                calibrated = boosted_score * 0.7  # Scale to 0.0-0.35
             
             final_score = max(0.0, min(1.0, calibrated))
             
         elif len(similarities) == 1:
-            # Single metric - be more conservative
+            # Single metric - be much more conservative
             single_score = similarities[0]
-            if single_score > 0.7:
-                final_score = 0.6 + single_score * 0.3  # Scale to 0.6-0.9
+            if single_score > 0.9:
+                final_score = 0.65 + single_score * 0.25  # Scale to 0.65-0.9
+            elif single_score > 0.7:
+                final_score = 0.45 + single_score * 0.3   # Scale to 0.45-0.65
             else:
-                final_score = single_score * 0.7  # Scale to 0.0-0.49
+                final_score = single_score * 0.6  # Scale to 0.0-0.42
         else:
             # No valid similarities - conservative fallback
             final_score = random.uniform(0.2, 0.4)
