@@ -9,7 +9,7 @@ from datetime import datetime
 
 # Detect if running on Streamlit Cloud
 def is_streamlit_cloud():
-    """Detect if running on Streamlit Cloud"""
+    """Detect if running on Streamlit Cloud with multiple indicators"""
     indicators = [
         'streamlit.app' in os.getenv('HOSTNAME', ''),
         os.getenv('STREAMLIT_CLOUD', False),
@@ -17,7 +17,8 @@ def is_streamlit_cloud():
         '/home/adminuser' in os.getcwd(),
         os.path.exists('/mount/src'),
         'streamlit.app' in str(os.environ.get('PWD', '')),
-        any('streamlit' in str(v).lower() for v in os.environ.values() if 'app' in str(v).lower())
+        any('streamlit' in str(v).lower() and 'app' in str(v).lower() 
+            for v in os.environ.values() if isinstance(v, str))
     ]
     return any(indicators)
 
@@ -25,7 +26,7 @@ def is_streamlit_cloud():
 TENSORFLOW_AVAILABLE = False
 tf = None
 
-# Only try to import TensorFlow if definitely running locally
+# NEVER import TensorFlow on cloud - this prevents segfaults
 if not is_streamlit_cloud():
     try:
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -47,7 +48,7 @@ st.set_page_config(
 # Load model
 @st.cache_resource
 def load_model():
-    # Double-check cloud environment before any TensorFlow operations
+    # Triple-check cloud environment before any TensorFlow operations
     if is_streamlit_cloud() or not TENSORFLOW_AVAILABLE or tf is None:
         return None
         
