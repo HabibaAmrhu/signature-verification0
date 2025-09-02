@@ -65,85 +65,167 @@ def load_model():
         return None
 
 def create_demo_prediction(img1, img2):
-    """Ultra-simple but accurate signature verification"""
+    """Robust signature verification with proper preprocessing and calibration"""
     try:
         import random
-        from scipy import ndimage
         
         # Convert to consistent format
-        arr1 = np.array(img1.convert('L').resize((150, 150))).astype(np.float32)
-        arr2 = np.array(img2.convert('L').resize((150, 150))).astype(np.float32)
+        arr1 = np.array(img1.convert('L').resize((200, 200))).astype(np.float32)
+        arr2 = np.array(img2.convert('L').resize((200, 200))).astype(np.float32)
         
-        # STEP 1: Check if images are nearly identical at pixel level
+        # STEP 1: Direct pixel comparison for truly identical images
         pixel_diff = np.mean(np.abs(arr1 - arr2))
-        if pixel_diff < 3.0:  # Nearly identical images
-            return random.uniform(0.96, 0.99)
+        if pixel_diff < 1.0:  # Truly identical
+            return random.uniform(0.97, 0.99)
+        elif pixel_diff < 5.0:  # Nearly identical
+            return random.uniform(0.92, 0.96)
         
-        # STEP 2: Simple but effective signature extraction
-        # Use fixed threshold instead of adaptive
-        binary1 = (arr1 < 180).astype(np.float32)  # Fixed threshold
-        binary2 = (arr2 < 180).astype(np.float32)
-        
-        # Clean up noise
-        binary1 = ndimage.binary_opening(binary1, structure=np.ones((2,2))).astype(np.float32)
-        binary2 = ndimage.binary_opening(binary2, structure=np.ones((2,2))).astype(np.float32)
-        
-        # STEP 3: Check if cleaned signatures are very similar
-        if np.sum(binary1) > 0 and np.sum(binary2) > 0:
-            # Direct binary comparison
-            intersection = np.sum(binary1 * binary2)
-            union = np.sum((binary1 + binary2) > 0)
+        # STEP 2: Robust adaptive thresholding for each image
+        def adaptive_threshold(img_array):
+            # Use Otsu-like method for better thresholding
+            hist, bins = np.histogram(img_array, bins=256, range=(0, 256))
             
-            if union > 0:
-                jaccard = intersection / union
-                if jaccard > 0.85:  # Very similar signatures
-                    return random.uniform(0.88, 0.95)
+            # Find the threshold that maximizes between-class variance
+            total_pixels = img_array.size
+            current_max = 0
+            threshold = 0
+            
+            sum_total = sum(i * hist[i] for i in range(256))
+            sum_bg = 0
+            weight_bg = 0
+            
+            for t in range(256):
+                weight_bg += hist[t]
+                if weight_bg == 0:
+                    continue
+                    
+                weight_fg = total_pixels - weight_bg
+                if weight_fg == 0:
+                    break
+                    
+                sum_bg += t * hist[t]
+                mean_bg = sum_bg / weight_bg
+                mean_fg = (sum_total - sum_bg) / weight_fg
+                
+                between_class_variance = weight_bg * weight_fg * (mean_bg - mean_fg) ** 2
+                
+                if between_class_variance > current_max:
+                    current_max = between_class_variance
+                    threshold = t
+            
+            return threshold
         
-        # STEP 4: Multiple simple similarity measures
+        # Apply adaptive thresholding
+        thresh1 = adaptive_threshold(arr1)
+        thresh2 = adaptive_threshold(arr2)
+        
+        binary1 = (arr1 < thresh1).astype(np.float32)
+        binary2 = (arr2 < thresh2).astype(np.float32)
+        
+        # STEP 3: Multiple robust similarity measures
         similarities = []
         
-        # Correlation similarity
+        # 1. Jaccard similarity (intersection over union)
+        if np.sum(binary1) > 0 and np.sum(binary2) > 0:
+            intersection = np.sum(binary1 * binary2)
+            union = np.sum((binary1 + binary2) > 0)
+            if union > 0:
+                jaccard = intersection / union
+                similarities.append(jaccard)
+        
+        # 2. Correlation coefficient
         if np.sum(binary1) > 0 and np.sum(binary2) > 0:
             corr = np.corrcoef(binary1.flatten(), binary2.flatten())[0, 1]
-            if not np.isnan(corr):
-                similarities.append(max(0, (corr + 1) / 2))
+            if not np.isnan(corr) and corr >= -1:
+                # Normalize correlation to 0-1 range
+                corr_sim = (corr + 1) / 2
+                similarities.append(corr_sim)
         
-        # Shape similarity
+        # 3. Structural similarity
         if np.sum(binary1) > 0 and np.sum(binary2) > 0:
-            # Compare basic shape properties
+            # Compare signature properties
             rows1, cols1 = np.where(binary1 > 0)
             rows2, cols2 = np.where(binary2 > 0)
             
             if len(rows1) > 0 and len(rows2) > 0:
-                # Aspect ratio similarity
-                h1, w1 = np.max(rows1) - np.min(rows1), np.max(cols1) - np.min(cols1)
-                h2, w2 = np.max(rows2) - np.min(rows2), np.max(cols2) - np.min(cols2)
+                # Bounding box similarity
+                h1, w1 = np.max(rows1) - np.min(rows1) + 1, np.max(cols1) - np.min(cols1) + 1
+                h2, w2 = np.max(rows2) - np.min(rows2) + 1, np.max(cols2) - np.min(cols2) + 1
                 
-                if h1 > 0 and h2 > 0 and w1 > 0 and w2 > 0:
+                # Aspect ratio similarity
+                if h1 > 0 and h2 > 0:
                     aspect1, aspect2 = w1/h1, w2/h2
-                    aspect_sim = 1.0 - min(abs(aspect1 - aspect2), 1.0)
+                    aspect_diff = abs(aspect1 - aspect2) / max(aspect1, aspect2)
+                    aspect_sim = max(0, 1.0 - aspect_diff)
                     similarities.append(aspect_sim)
                 
+                # Size similarity
+                size1, size2 = h1 * w1, h2 * w2
+                size_ratio = min(size1, size2) / max(size1, size2)
+                similarities.append(size_ratio)
+                
                 # Density similarity
-                density1 = np.sum(binary1) / (h1 * w1) if h1 * w1 > 0 else 0
-                density2 = np.sum(binary2) / (h2 * w2) if h2 * w2 > 0 else 0
-                density_sim = 1.0 - min(abs(density1 - density2), 1.0)
+                density1 = np.sum(binary1) / size1
+                density2 = np.sum(binary2) / size2
+                density_diff = abs(density1 - density2) / max(density1, density2, 0.001)
+                density_sim = max(0, 1.0 - density_diff)
                 similarities.append(density_sim)
         
-        # STEP 5: Calculate final score
-        if similarities:
+        # 4. Center of mass similarity
+        if np.sum(binary1) > 0 and np.sum(binary2) > 0:
+            # Calculate centers of mass
+            rows1, cols1 = np.where(binary1 > 0)
+            rows2, cols2 = np.where(binary2 > 0)
+            
+            if len(rows1) > 0 and len(rows2) > 0:
+                cm1_y, cm1_x = np.mean(rows1), np.mean(cols1)
+                cm2_y, cm2_x = np.mean(rows2), np.mean(cols2)
+                
+                # Normalize to image size
+                cm1_y_norm, cm1_x_norm = cm1_y / 200, cm1_x / 200
+                cm2_y_norm, cm2_x_norm = cm2_y / 200, cm2_x / 200
+                
+                # Calculate distance
+                cm_distance = np.sqrt((cm1_y_norm - cm2_y_norm)**2 + (cm1_x_norm - cm2_x_norm)**2)
+                cm_sim = max(0, 1.0 - cm_distance * 2)  # Scale distance
+                similarities.append(cm_sim)
+        
+        # STEP 4: Intelligent score calculation
+        if len(similarities) >= 2:
+            # Use weighted average with agreement bonus
             base_score = np.mean(similarities)
             
-            # Boost if multiple metrics agree
-            if len(similarities) >= 2:
-                agreement = 1.0 - np.std(similarities)
-                base_score = base_score * (0.7 + 0.3 * agreement)
+            # Agreement bonus: if metrics agree, boost confidence
+            agreement = 1.0 - np.std(similarities)
+            boosted_score = base_score * (0.8 + 0.2 * agreement)
             
-            # Add small variation
-            variation = random.uniform(-0.02, 0.02)
-            final_score = max(0.0, min(1.0, base_score + variation))
+            # Apply calibration based on score range
+            if boosted_score > 0.8:
+                # High similarity - likely same person
+                calibrated = 0.75 + (boosted_score - 0.8) * 1.25  # Scale to 0.75-1.0
+            elif boosted_score > 0.6:
+                # Medium similarity - possible same person
+                calibrated = 0.55 + (boosted_score - 0.6) * 1.0   # Scale to 0.55-0.75
+            else:
+                # Low similarity - likely different people
+                calibrated = boosted_score * 0.9  # Scale to 0.0-0.54
+            
+            final_score = max(0.0, min(1.0, calibrated))
+            
+        elif len(similarities) == 1:
+            # Single metric - be more conservative
+            single_score = similarities[0]
+            if single_score > 0.7:
+                final_score = 0.6 + single_score * 0.3  # Scale to 0.6-0.9
+            else:
+                final_score = single_score * 0.7  # Scale to 0.0-0.49
         else:
-            final_score = random.uniform(0.25, 0.45)
+            # No valid similarities - conservative fallback
+            final_score = random.uniform(0.2, 0.4)
+        
+        # Add small natural variation
+        variation = random.uniform(-0.01, 0.01)
+        final_score = max(0.0, min(1.0, final_score + variation))
         
         return final_score
         
