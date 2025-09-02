@@ -12,9 +12,13 @@
   - Add preprocessing validation to ensure identical inputs produce identical outputs
   - _Requirements: 1.1, 2.1, 4.1_
 
+
+
 - [ ] 2. Implement core feature extraction system
   - [ ] 2.1 Create essential shape-based features
     - Implement aspect ratio, fill ratio, and bounding box analysis
+
+
     - Add contour-based shape descriptors
     - Write unit tests for shape feature consistency
     - _Requirements: 2.2, 4.2_
@@ -36,9 +40,14 @@
 
 
 
+
+
     - Create special handling for near-identical feature vectors
     - Add threshold-based identity detection (score >= 0.95 for identical)
     - Implement feature vector comparison with tolerance handling
+
+
+
 
 
     - _Requirements: 1.1, 1.2, 3.1_
