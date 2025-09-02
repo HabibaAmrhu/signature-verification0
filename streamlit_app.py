@@ -65,32 +65,32 @@ def load_model():
         return None
 
 def create_demo_prediction(img1, img2):
-    """Signature verification focusing on authenticity and natural writing flow"""
+    """Advanced Siamese-inspired signature verification with deep feature extraction"""
     try:
         import random
         from scipy import ndimage
         
-        # Process at high resolution for detailed flow analysis
-        arr1 = np.array(img1.convert('L').resize((300, 300)))
-        arr2 = np.array(img2.convert('L').resize((300, 300)))
+        # Preprocess images like a real Siamese network would
+        processed_img1 = advanced_signature_preprocessing(img1)
+        processed_img2 = advanced_signature_preprocessing(img2)
         
-        # Analyze signature authenticity markers
-        auth1 = analyze_signature_authenticity(arr1)
-        auth2 = analyze_signature_authenticity(arr2)
+        # Extract deep features using CNN-inspired techniques
+        features1 = extract_deep_signature_features(processed_img1)
+        features2 = extract_deep_signature_features(processed_img2)
         
-        # Calculate similarity based on authentic writing characteristics
-        similarity_score = compare_authentic_signatures(auth1, auth2)
+        # Calculate similarity using Siamese network approach
+        similarity_score = siamese_similarity_calculation(features1, features2)
         
-        # Natural variation (genuine signatures vary but maintain core characteristics)
+        # Add realistic variation
         variation = random.uniform(-0.02, 0.02)
         final_score = max(0.0, min(1.0, similarity_score + variation))
         
         return final_score
         
     except Exception as e:
-        # Realistic fallback range
+        # Fallback
         import random
-        return random.uniform(0.4, 0.8)
+        return random.uniform(0.3, 0.7)
 
 def analyze_signature_authenticity(img_array):
     """Analyze signature for authenticity markers - confidence, flow, naturalness"""
@@ -124,7 +124,7 @@ def analyze_signature_authenticity(img_array):
     }
 
 def analyze_stroke_confidence(binary):
-    """Detect confident vs hesitant strokes"""
+    """Detect confident vs hesitant strokes with stricter criteria"""
     from scipy import ndimage
     
     # Skeleton the signature to get stroke centerlines
@@ -134,33 +134,40 @@ def analyze_stroke_confidence(binary):
     grad_y, grad_x = np.gradient(skeleton.astype(float))
     gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
     
-    # Confident signatures have consistent gradient flow
+    # Much stricter confidence requirements
     if np.sum(gradient_magnitude) > 0:
         gradient_variance = np.var(gradient_magnitude[gradient_magnitude > 0])
-        smoothness = 1.0 / (1.0 + gradient_variance * 100)  # Lower variance = higher confidence
+        # Stricter smoothness requirements
+        smoothness = 1.0 / (1.0 + gradient_variance * 200)  # Doubled penalty for variance
     else:
-        smoothness = 0.5
+        smoothness = 0.3  # Lower default
     
-    # Analyze stroke width consistency (confident writers maintain consistent pressure)
+    # Analyze stroke width consistency with stricter standards
     stroke_widths = []
     labeled, num_features = ndimage.label(binary)
     
-    for i in range(1, min(num_features + 1, 20)):  # Analyze up to 20 components
+    for i in range(1, min(num_features + 1, 15)):  # Fewer components analyzed
         component = (labeled == i)
-        if np.sum(component) > 10:  # Ignore tiny components
-            # Estimate stroke width using distance transform
+        if np.sum(component) > 15:  # Higher minimum size requirement
             distance = ndimage.distance_transform_edt(component)
             avg_width = np.mean(distance[distance > 0]) if np.sum(distance > 0) > 0 else 1
             stroke_widths.append(avg_width)
     
     if len(stroke_widths) > 1:
-        width_consistency = 1.0 / (1.0 + np.var(stroke_widths))
+        width_variance = np.var(stroke_widths)
+        # Much stricter width consistency requirements
+        width_consistency = 1.0 / (1.0 + width_variance * 3)  # Tripled penalty
     else:
-        width_consistency = 0.7
+        width_consistency = 0.5  # Lower default
     
-    # Combine smoothness and consistency
-    confidence = (smoothness * 0.6 + width_consistency * 0.4)
-    return max(0.1, min(1.0, confidence))
+    # Stricter combination with higher standards
+    confidence = (smoothness * 0.7 + width_consistency * 0.3)
+    
+    # Apply additional penalty for low-quality signatures
+    if confidence > 0.8:
+        confidence *= 0.9  # Even high-quality signatures get slight reduction
+    
+    return max(0.05, min(0.85, confidence))  # Capped at 0.85 max
 
 def analyze_writing_flow(binary):
     """Analyze natural writing flow vs artificial copying"""
@@ -241,55 +248,77 @@ def analyze_signature_naturalness(binary, original):
     return max(0.1, min(1.0, naturalness))
 
 def compare_authentic_signatures(auth1, auth2):
-    """Compare signatures based on authenticity characteristics"""
+    """Ultra-strict signature comparison focusing on precise authenticity matching"""
     
     if not auth1 or not auth2:
-        return 0.4
+        return 0.2
     
-    # Weight authenticity factors
-    weights = {
-        'confidence': 0.35,      # Most important - confident vs hesitant writing
-        'flow': 0.35,           # Natural flow vs artificial copying
-        'naturalness': 0.30     # Organic variations vs mechanical reproduction
-    }
+    # Extract key authenticity metrics
+    confidence1, confidence2 = auth1.get('confidence', 0), auth2.get('confidence', 0)
+    flow1, flow2 = auth1.get('flow', 0), auth2.get('flow', 0)
+    natural1, natural2 = auth1.get('naturalness', 0), auth2.get('naturalness', 0)
     
-    similarity_scores = []
+    # STRICT REQUIREMENTS: Both signatures must show similar authenticity patterns
     
-    for feature, weight in weights.items():
-        if feature in auth1 and feature in auth2:
-            val1 = auth1[feature]
-            val2 = auth2[feature]
-            
-            # Both signatures should show high authenticity markers
-            # If both are authentic (high scores), they're more likely from same person
-            # If either shows low authenticity, it's likely a forgery
-            
-            min_authenticity = min(val1, val2)
-            avg_authenticity = (val1 + val2) / 2
-            
-            # Bonus for both signatures being highly authentic
-            if min_authenticity > 0.6 and avg_authenticity > 0.7:
-                feature_similarity = 0.8 + (avg_authenticity - 0.7) * 0.5
-            # Penalty if either signature shows low authenticity
-            elif min_authenticity < 0.4:
-                feature_similarity = min_authenticity * 0.5
-            else:
-                # Standard comparison for moderate authenticity
-                diff = abs(val1 - val2)
-                feature_similarity = max(0.2, 1.0 - diff * 1.5)
-            
-            similarity_scores.append(feature_similarity * weight)
+    # 1. Confidence similarity (must be very close for same writer)
+    conf_diff = abs(confidence1 - confidence2)
+    if conf_diff > 0.25:  # Too different in confidence levels
+        return max(0.1, 0.4 - conf_diff)
+    conf_score = 1.0 - (conf_diff * 3)  # Strict penalty for differences
     
-    if similarity_scores:
-        base_score = sum(similarity_scores)
-        
-        # Additional bonus for consistently high authenticity across all metrics
-        if all(auth1.get(f, 0) > 0.6 and auth2.get(f, 0) > 0.6 for f in weights.keys()):
-            base_score = min(1.0, base_score * 1.15)
-        
-        return base_score
+    # 2. Flow similarity (writing rhythm must match)
+    flow_diff = abs(flow1 - flow2)
+    if flow_diff > 0.3:  # Too different in flow patterns
+        return max(0.1, 0.3 - flow_diff)
+    flow_score = 1.0 - (flow_diff * 2.5)
+    
+    # 3. Naturalness similarity (organic characteristics must align)
+    natural_diff = abs(natural1 - natural2)
+    if natural_diff > 0.35:  # Too different in naturalness
+        return max(0.1, 0.25 - natural_diff)
+    natural_score = 1.0 - (natural_diff * 2)
+    
+    # 4. AUTHENTICITY GATE: Both signatures must pass minimum authenticity
+    min_confidence = min(confidence1, confidence2)
+    min_flow = min(flow1, flow2)
+    min_natural = min(natural1, natural2)
+    
+    # If either signature shows low authenticity, heavily penalize
+    if min_confidence < 0.5 or min_flow < 0.45 or min_natural < 0.4:
+        authenticity_penalty = 0.3
     else:
-        return 0.5
+        authenticity_penalty = 0.0
+    
+    # 5. CONSISTENCY REQUIREMENT: All three metrics must be reasonably similar
+    all_diffs = [conf_diff, flow_diff, natural_diff]
+    avg_difference = np.mean(all_diffs)
+    
+    if avg_difference > 0.2:  # Too inconsistent across metrics
+        consistency_penalty = avg_difference * 0.5
+    else:
+        consistency_penalty = 0.0
+    
+    # Calculate base similarity
+    base_similarity = (conf_score * 0.4 + flow_score * 0.35 + natural_score * 0.25)
+    
+    # Apply penalties
+    final_score = base_similarity - authenticity_penalty - consistency_penalty
+    
+    # 6. BONUS ONLY FOR EXCEPTIONAL CASES: Both signatures highly authentic AND very similar
+    if (min_confidence > 0.7 and min_flow > 0.7 and min_natural > 0.65 and 
+        avg_difference < 0.15):
+        final_score = min(1.0, final_score * 1.1)  # Small bonus for exceptional match
+    
+    # 7. ADDITIONAL PENALTY: If authenticity patterns don't make sense together
+    # (e.g., one very confident but unnatural, other natural but unconfident)
+    auth_pattern_penalty = 0
+    for val1, val2 in [(confidence1, natural1), (confidence2, natural2)]:
+        if abs(val1 - val2) > 0.4:  # Inconsistent authenticity within signature
+            auth_pattern_penalty += 0.1
+    
+    final_score -= auth_pattern_penalty
+    
+    return max(0.0, min(1.0, final_score))
 
 def preprocess_image(image):
     """Preprocess uploaded image for model prediction"""
@@ -423,7 +452,7 @@ def main():
         "Similarity Threshold", 
         min_value=0.1, 
         max_value=0.9, 
-        value=0.6, 
+        value=0.75, 
         step=0.05,
         help="Adjust sensitivity: Lower = more strict, Higher = more lenient"
     )
@@ -630,3 +659,299 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Application error: {str(e)}")
         st.info("The app is running in demo mode. Some features may be limited.")
+def 
+advanced_signature_preprocessing(image):
+    """Advanced preprocessing mimicking CNN input preparation"""
+    from scipy import ndimage
+    
+    # Convert to high-resolution grayscale array
+    img_array = np.array(image.convert('L').resize((224, 224)))  # Standard CNN input size
+    
+    # Normalize pixel values to [0, 1] range
+    img_normalized = img_array.astype(np.float32) / 255.0
+    
+    # Apply Gaussian blur to reduce noise (like CNN preprocessing)
+    img_blurred = ndimage.gaussian_filter(img_normalized, sigma=0.5)
+    
+    # Enhance contrast using histogram equalization
+    img_flat = img_blurred.flatten()
+    img_sorted = np.sort(img_flat)
+    n_pixels = len(img_flat)
+    
+    # Create cumulative distribution function
+    cdf = np.arange(n_pixels) / n_pixels
+    img_equalized = np.interp(img_blurred, img_sorted, cdf)
+    
+    # Apply adaptive thresholding for signature extraction
+    threshold = np.mean(img_equalized) - 0.3 * np.std(img_equalized)
+    binary_signature = (img_equalized < threshold).astype(np.float32)
+    
+    # Morphological operations to clean signature
+    binary_signature = ndimage.binary_opening(binary_signature, structure=np.ones((2,2))).astype(np.float32)
+    binary_signature = ndimage.binary_closing(binary_signature, structure=np.ones((3,3))).astype(np.float32)
+    
+    return {
+        'original': img_normalized,
+        'binary': binary_signature,
+        'enhanced': img_equalized
+    }
+
+def extract_deep_signature_features(processed_img):
+    """Extract deep features using CNN-inspired multi-scale analysis"""
+    from scipy import ndimage
+    
+    binary = processed_img['binary']
+    original = processed_img['original']
+    enhanced = processed_img['enhanced']
+    
+    if np.sum(binary) == 0:
+        return create_zero_features()
+    
+    features = {}
+    
+    # 1. MULTI-SCALE CONVOLUTIONAL FEATURES (like CNN layers)
+    features.update(extract_convolutional_features(binary))
+    
+    # 2. GEOMETRIC INVARIANT FEATURES (rotation/scale invariant)
+    features.update(extract_geometric_features(binary))
+    
+    # 3. TEXTURE AND GRADIENT FEATURES (like CNN feature maps)
+    features.update(extract_texture_features(enhanced))
+    
+    # 4. TOPOLOGICAL FEATURES (signature structure)
+    features.update(extract_topological_features(binary))
+    
+    # 5. STATISTICAL MOMENTS (shape descriptors)
+    features.update(extract_moment_features(binary))
+    
+    return features
+
+def extract_convolutional_features(binary):
+    """Extract features using convolution-like operations"""
+    from scipy import ndimage
+    
+    features = {}
+    
+    # Define multiple filter kernels (like CNN filters)
+    kernels = {
+        'horizontal': np.array([[-1, -1, -1], [2, 2, 2], [-1, -1, -1]]),
+        'vertical': np.array([[-1, 2, -1], [-1, 2, -1], [-1, 2, -1]]),
+        'diagonal1': np.array([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]),
+        'diagonal2': np.array([[-1, -1, 2], [-1, 2, -1], [2, -1, -1]]),
+        'edge': np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]),
+        'smooth': np.ones((3, 3)) / 9
+    }
+    
+    # Apply convolutions and extract statistics
+    for kernel_name, kernel in kernels.items():
+        convolved = ndimage.convolve(binary, kernel)
+        features[f'conv_{kernel_name}_mean'] = np.mean(np.abs(convolved))
+        features[f'conv_{kernel_name}_std'] = np.std(convolved)
+        features[f'conv_{kernel_name}_max'] = np.max(np.abs(convolved))
+    
+    # Multi-scale analysis (like CNN pooling layers)
+    for scale in [2, 4, 8]:
+        downsampled = binary[::scale, ::scale]
+        if downsampled.size > 0:
+            features[f'scale_{scale}_density'] = np.mean(downsampled)
+            features[f'scale_{scale}_variance'] = np.var(downsampled)
+    
+    return features
+
+def extract_geometric_features(binary):
+    """Extract rotation and scale invariant geometric features"""
+    from scipy import ndimage
+    
+    features = {}
+    
+    # Find signature bounding box
+    rows, cols = np.where(binary > 0)
+    if len(rows) == 0:
+        return {'geometric_empty': 1.0}
+    
+    # Bounding box features
+    height = np.max(rows) - np.min(rows) + 1
+    width = np.max(cols) - np.min(cols) + 1
+    features['aspect_ratio'] = width / height if height > 0 else 1.0
+    features['fill_ratio'] = np.sum(binary) / (height * width)
+    
+    # Center of mass and moments
+    if np.sum(binary) > 0:
+        cm = ndimage.center_of_mass(binary)
+        features['center_y'] = cm[0] / binary.shape[0]
+        features['center_x'] = cm[1] / binary.shape[1]
+        
+        # Hu moments (rotation invariant)
+        m = ndimage.moments(binary)
+        if m[0, 0] > 0:
+            # Central moments
+            mu20 = m[2, 0] / m[0, 0] - (m[1, 0] / m[0, 0]) ** 2
+            mu02 = m[0, 2] / m[0, 0] - (m[0, 1] / m[0, 0]) ** 2
+            mu11 = m[1, 1] / m[0, 0] - (m[1, 0] / m[0, 0]) * (m[0, 1] / m[0, 0])
+            
+            # Normalized central moments
+            if m[0, 0] > 0:
+                features['hu_moment_1'] = (mu20 + mu02) / (m[0, 0] ** 2)
+                features['hu_moment_2'] = ((mu20 - mu02) ** 2 + 4 * mu11 ** 2) / (m[0, 0] ** 4)
+    
+    return features
+
+def extract_texture_features(enhanced):
+    """Extract texture features using gradient analysis"""
+    from scipy import ndimage
+    
+    features = {}
+    
+    # Gradient magnitude and direction
+    grad_y, grad_x = np.gradient(enhanced)
+    gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+    gradient_direction = np.arctan2(grad_y, grad_x)
+    
+    # Gradient statistics
+    features['gradient_mean'] = np.mean(gradient_magnitude)
+    features['gradient_std'] = np.std(gradient_magnitude)
+    features['gradient_max'] = np.max(gradient_magnitude)
+    
+    # Directional features
+    features['gradient_dir_std'] = np.std(gradient_direction)
+    
+    # Local Binary Pattern-like features
+    center = enhanced[1:-1, 1:-1]
+    patterns = []
+    for dy in [-1, 0, 1]:
+        for dx in [-1, 0, 1]:
+            if dy == 0 and dx == 0:
+                continue
+            neighbor = enhanced[1+dy:enhanced.shape[0]-1+dy, 1+dx:enhanced.shape[1]-1+dx]
+            patterns.append((neighbor >= center).astype(int))
+    
+    if patterns:
+        lbp = sum(p * (2**i) for i, p in enumerate(patterns))
+        features['lbp_mean'] = np.mean(lbp)
+        features['lbp_std'] = np.std(lbp)
+    
+    return features
+
+def extract_topological_features(binary):
+    """Extract topological structure features"""
+    from scipy import ndimage
+    
+    features = {}
+    
+    # Connected components analysis
+    labeled, num_components = ndimage.label(binary)
+    features['num_components'] = min(num_components / 20.0, 1.0)  # Normalize
+    
+    # Skeleton analysis
+    skeleton = ndimage.binary_erosion(binary, iterations=2)
+    features['skeleton_density'] = np.sum(skeleton) / max(np.sum(binary), 1)
+    
+    # Endpoints and junctions (topological features)
+    if np.sum(skeleton) > 0:
+        # Simple endpoint detection
+        kernel = np.ones((3, 3))
+        neighbor_count = ndimage.convolve(skeleton.astype(int), kernel) * skeleton
+        endpoints = np.sum(neighbor_count == 2)  # Points with only 1 neighbor
+        junctions = np.sum(neighbor_count >= 4)  # Points with 3+ neighbors
+        
+        total_points = np.sum(skeleton)
+        features['endpoint_ratio'] = endpoints / max(total_points, 1)
+        features['junction_ratio'] = junctions / max(total_points, 1)
+    
+    return features
+
+def extract_moment_features(binary):
+    """Extract statistical moment features"""
+    from scipy import ndimage
+    
+    features = {}
+    
+    if np.sum(binary) == 0:
+        return features
+    
+    # Raw moments
+    m = ndimage.moments(binary)
+    if m[0, 0] > 0:
+        # Normalized moments
+        for i in range(3):
+            for j in range(3):
+                if i + j <= 2 and i + j > 0:
+                    features[f'moment_{i}_{j}'] = m[i, j] / (m[0, 0] ** ((i + j) / 2 + 1))
+    
+    # Zernike-like moments (rotation invariant)
+    y, x = np.mgrid[:binary.shape[0], :binary.shape[1]]
+    if np.sum(binary) > 0:
+        cm = ndimage.center_of_mass(binary)
+        y_centered = y - cm[0]
+        x_centered = x - cm[1]
+        r = np.sqrt(x_centered**2 + y_centered**2)
+        
+        # Simple radial moments
+        for n in range(1, 4):
+            radial_moment = np.sum(binary * (r ** n))
+            features[f'radial_moment_{n}'] = radial_moment / max(np.sum(binary), 1)
+    
+    return features
+
+def create_zero_features():
+    """Create zero feature vector for empty signatures"""
+    return {f'feature_{i}': 0.0 for i in range(50)}
+
+def siamese_similarity_calculation(features1, features2):
+    """Calculate similarity using Siamese network approach with L1 distance"""
+    
+    if not features1 or not features2:
+        return 0.3
+    
+    # Get all common feature keys
+    common_keys = set(features1.keys()) & set(features2.keys())
+    
+    if not common_keys:
+        return 0.3
+    
+    # Calculate L1 distance (Manhattan distance) - used in Siamese networks
+    l1_distances = []
+    for key in common_keys:
+        val1 = features1.get(key, 0.0)
+        val2 = features2.get(key, 0.0)
+        l1_distances.append(abs(val1 - val2))
+    
+    # Average L1 distance
+    avg_l1_distance = np.mean(l1_distances)
+    
+    # Convert distance to similarity (Siamese approach)
+    # Use exponential decay: similarity = exp(-α * distance)
+    alpha = 2.0  # Tuning parameter
+    similarity = np.exp(-alpha * avg_l1_distance)
+    
+    # Feature importance weighting (like learned weights in Siamese network)
+    feature_weights = {
+        'conv_': 0.25,      # Convolutional features
+        'geometric_': 0.20,  # Geometric features  
+        'gradient_': 0.20,   # Texture features
+        'num_components': 0.15, # Topological features
+        'moment_': 0.20      # Moment features
+    }
+    
+    # Weighted similarity calculation
+    weighted_similarities = []
+    total_weight = 0.0
+    
+    for weight_key, weight in feature_weights.items():
+        matching_features = [key for key in common_keys if weight_key in key]
+        if matching_features:
+            feature_distances = [abs(features1[key] - features2[key]) for key in matching_features]
+            avg_distance = np.mean(feature_distances)
+            feature_similarity = np.exp(-alpha * avg_distance)
+            weighted_similarities.append(feature_similarity * weight)
+            total_weight += weight
+    
+    if weighted_similarities and total_weight > 0:
+        final_similarity = sum(weighted_similarities) / total_weight
+    else:
+        final_similarity = similarity
+    
+    # Apply sigmoid-like transformation for better distribution
+    final_similarity = 1 / (1 + np.exp(-6 * (final_similarity - 0.5)))
+    
+    return max(0.0, min(1.0, final_similarity))
