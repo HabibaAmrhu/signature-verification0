@@ -100,20 +100,20 @@ def create_demo_prediction(img1, img2):
         if not np.isnan(edge_corr):
             similarities.append(max(0, (edge_corr + 1) / 2))
         
-        # 4. Aspect ratio and size penalties
+        # 4. Aspect ratio penalties (reduced)
         h1, w1 = binary1.shape
         h2, w2 = binary2.shape
         aspect1 = w1 / h1 if h1 > 0 else 1
         aspect2 = w2 / h2 if h2 > 0 else 1
-        aspect_penalty = abs(aspect1 - aspect2) * 0.5
+        aspect_penalty = abs(aspect1 - aspect2) * 0.2  # Reduced from 0.5
         penalties.append(aspect_penalty)
         
-        # 5. Center of mass comparison
+        # 5. Center of mass comparison (more lenient)
         if np.sum(binary1) > 0 and np.sum(binary2) > 0:
             cm1 = ndimage.center_of_mass(binary1)
             cm2 = ndimage.center_of_mass(binary2)
             cm_distance = np.sqrt((cm1[0] - cm2[0])**2 + (cm1[1] - cm2[1])**2)
-            cm_penalty = min(0.3, cm_distance / 50)  # Normalize and cap penalty
+            cm_penalty = min(0.15, cm_distance / 100)  # Reduced penalty
             penalties.append(cm_penalty)
         
         # 6. Stroke width analysis
@@ -123,18 +123,22 @@ def create_demo_prediction(img1, img2):
             stroke_ratio = min(stroke_pixels1, stroke_pixels2) / max(stroke_pixels1, stroke_pixels2)
             similarities.append(stroke_ratio)
         
-        # Calculate final similarity with penalties
+        # Calculate final similarity with balanced penalties
         if similarities:
             base_similarity = np.mean(similarities)
-            total_penalty = sum(penalties)
-            final_similarity = max(0.1, base_similarity - total_penalty)
+            total_penalty = sum(penalties) * 0.5  # Reduce penalty impact
+            final_similarity = max(0.2, base_similarity - total_penalty)
             
-            # Add controlled randomness (less than before)
+            # Boost similarity if multiple metrics agree
+            if len(similarities) >= 3 and base_similarity > 0.6:
+                final_similarity += 0.1  # Bonus for consistent high scores
+            
+            # Add controlled randomness
             import random
-            final_similarity += random.uniform(-0.03, 0.03)
+            final_similarity += random.uniform(-0.02, 0.02)
             final_similarity = max(0.0, min(1.0, final_similarity))
         else:
-            final_similarity = 0.4  # Lower default for unknown cases
+            final_similarity = 0.5  # Neutral default
         
         return final_similarity
         
@@ -275,7 +279,7 @@ def main():
         "Similarity Threshold", 
         min_value=0.1, 
         max_value=0.9, 
-        value=0.65, 
+        value=0.55, 
         step=0.05,
         help="Adjust sensitivity: Lower = more strict, Higher = more lenient"
     )
