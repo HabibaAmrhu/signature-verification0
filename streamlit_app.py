@@ -65,57 +65,83 @@ def load_model():
         return None
 
 def create_demo_prediction(img1, img2):
-    """Create a sophisticated demo prediction based on multiple image similarity metrics"""
+    """Enhanced demo prediction with stricter signature-specific analysis"""
     try:
-        # Convert images to grayscale arrays
-        arr1 = np.array(img1.convert('L').resize((100, 100)))
-        arr2 = np.array(img2.convert('L').resize((100, 100)))
+        # Convert images to grayscale arrays with better preprocessing
+        arr1 = np.array(img1.convert('L').resize((150, 150)))
+        arr2 = np.array(img2.convert('L').resize((150, 150)))
         
-        # Multiple similarity metrics
+        # Apply threshold to get binary images (signature vs background)
+        threshold1 = np.mean(arr1) - np.std(arr1) * 0.5
+        threshold2 = np.mean(arr2) - np.std(arr2) * 0.5
+        binary1 = (arr1 < threshold1).astype(float)
+        binary2 = (arr2 < threshold2).astype(float)
+        
         similarities = []
+        penalties = []
         
-        # 1. Correlation coefficient
-        correlation = np.corrcoef(arr1.flatten(), arr2.flatten())[0, 1]
-        if not np.isnan(correlation):
-            similarities.append((correlation + 1) / 2)
+        # 1. Shape-based correlation (more discriminating)
+        shape_corr = np.corrcoef(binary1.flatten(), binary2.flatten())[0, 1]
+        if not np.isnan(shape_corr):
+            similarities.append(max(0, (shape_corr + 1) / 2))
         
-        # 2. Structural similarity (simplified)
-        mean1, mean2 = np.mean(arr1), np.mean(arr2)
-        std1, std2 = np.std(arr1), np.std(arr2)
-        if std1 > 0 and std2 > 0:
-            ssim_like = (2 * mean1 * mean2 + 1) / (mean1**2 + mean2**2 + 1) * \
-                       (2 * std1 * std2 + 1) / (std1**2 + std2**2 + 1)
-            similarities.append(abs(ssim_like))
+        # 2. Stroke density comparison
+        density1 = np.sum(binary1) / binary1.size
+        density2 = np.sum(binary2) / binary2.size
+        density_diff = abs(density1 - density2)
+        density_sim = max(0, 1 - density_diff * 3)  # Penalize density differences
+        similarities.append(density_sim)
         
-        # 3. Histogram similarity
-        hist1 = np.histogram(arr1, bins=50, range=(0, 255))[0]
-        hist2 = np.histogram(arr2, bins=50, range=(0, 255))[0]
-        hist_sim = 1 - np.sum(np.abs(hist1 - hist2)) / (2 * np.sum(hist1))
-        similarities.append(hist_sim)
-        
-        # 4. Edge similarity (simplified)
-        edges1 = np.abs(np.gradient(arr1.astype(float))[0]) + np.abs(np.gradient(arr1.astype(float))[1])
-        edges2 = np.abs(np.gradient(arr2.astype(float))[0]) + np.abs(np.gradient(arr2.astype(float))[1])
+        # 3. Edge pattern analysis (signature-specific)
+        from scipy import ndimage
+        edges1 = ndimage.sobel(binary1)
+        edges2 = ndimage.sobel(binary2)
         edge_corr = np.corrcoef(edges1.flatten(), edges2.flatten())[0, 1]
         if not np.isnan(edge_corr):
-            similarities.append((edge_corr + 1) / 2)
+            similarities.append(max(0, (edge_corr + 1) / 2))
         
-        # Combine similarities with weights
+        # 4. Aspect ratio and size penalties
+        h1, w1 = binary1.shape
+        h2, w2 = binary2.shape
+        aspect1 = w1 / h1 if h1 > 0 else 1
+        aspect2 = w2 / h2 if h2 > 0 else 1
+        aspect_penalty = abs(aspect1 - aspect2) * 0.5
+        penalties.append(aspect_penalty)
+        
+        # 5. Center of mass comparison
+        if np.sum(binary1) > 0 and np.sum(binary2) > 0:
+            cm1 = ndimage.center_of_mass(binary1)
+            cm2 = ndimage.center_of_mass(binary2)
+            cm_distance = np.sqrt((cm1[0] - cm2[0])**2 + (cm1[1] - cm2[1])**2)
+            cm_penalty = min(0.3, cm_distance / 50)  # Normalize and cap penalty
+            penalties.append(cm_penalty)
+        
+        # 6. Stroke width analysis
+        stroke_pixels1 = np.sum(binary1 > 0.5)
+        stroke_pixels2 = np.sum(binary2 > 0.5)
+        if stroke_pixels1 > 0 and stroke_pixels2 > 0:
+            stroke_ratio = min(stroke_pixels1, stroke_pixels2) / max(stroke_pixels1, stroke_pixels2)
+            similarities.append(stroke_ratio)
+        
+        # Calculate final similarity with penalties
         if similarities:
-            final_similarity = np.mean(similarities)
-            # Add slight randomness for realism
+            base_similarity = np.mean(similarities)
+            total_penalty = sum(penalties)
+            final_similarity = max(0.1, base_similarity - total_penalty)
+            
+            # Add controlled randomness (less than before)
             import random
-            final_similarity += random.uniform(-0.05, 0.05)
+            final_similarity += random.uniform(-0.03, 0.03)
             final_similarity = max(0.0, min(1.0, final_similarity))
         else:
-            final_similarity = 0.5
+            final_similarity = 0.4  # Lower default for unknown cases
         
         return final_similarity
         
     except Exception as e:
-        # Fallback to random if everything fails
+        # More conservative fallback
         import random
-        return random.uniform(0.3, 0.8)
+        return random.uniform(0.2, 0.6)
 
 def preprocess_image(image):
     """Preprocess uploaded image for model prediction"""
@@ -249,7 +275,7 @@ def main():
         "Similarity Threshold", 
         min_value=0.1, 
         max_value=0.9, 
-        value=0.5, 
+        value=0.65, 
         step=0.05,
         help="Adjust sensitivity: Lower = more strict, Higher = more lenient"
     )
