@@ -7,19 +7,25 @@ import zipfile
 import os
 from datetime import datetime
 
-# Configure TensorFlow to use CPU only and suppress warnings
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# Check if we're running on Streamlit Cloud (avoid TensorFlow there)
+STREAMLIT_CLOUD = os.getenv('STREAMLIT_CLOUD', False) or 'streamlit.app' in os.getenv('HOSTNAME', '')
 
-try:
-    import tensorflow as tf
-    # Force CPU usage
-    tf.config.set_visible_devices([], 'GPU')
-    TENSORFLOW_AVAILABLE = True
-except ImportError:
+if STREAMLIT_CLOUD:
+    # Skip TensorFlow on Streamlit Cloud to avoid segfaults
     TENSORFLOW_AVAILABLE = False
-    st.error("TensorFlow not available. Running in demo mode only.")
+    tf = None
+else:
+    # Configure TensorFlow for local use
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    
+    try:
+        import tensorflow as tf
+        tf.config.set_visible_devices([], 'GPU')
+        TENSORFLOW_AVAILABLE = True
+    except ImportError:
+        TENSORFLOW_AVAILABLE = False
+        tf = None
 
 # Page config
 st.set_page_config(
@@ -47,28 +53,54 @@ def load_model():
         return None
 
 def create_demo_prediction(img1, img2):
-    """Create a demo prediction based on image similarity"""
+    """Create a sophisticated demo prediction based on multiple image similarity metrics"""
     try:
-        # Simple image comparison for demo
+        # Convert images to grayscale arrays
         arr1 = np.array(img1.convert('L').resize((100, 100)))
         arr2 = np.array(img2.convert('L').resize((100, 100)))
         
-        # Calculate basic similarity (correlation coefficient)
+        # Multiple similarity metrics
+        similarities = []
+        
+        # 1. Correlation coefficient
         correlation = np.corrcoef(arr1.flatten(), arr2.flatten())[0, 1]
+        if not np.isnan(correlation):
+            similarities.append((correlation + 1) / 2)
         
-        # Convert to similarity score between 0 and 1
-        if np.isnan(correlation):
-            similarity = 0.5  # Default if calculation fails
+        # 2. Structural similarity (simplified)
+        mean1, mean2 = np.mean(arr1), np.mean(arr2)
+        std1, std2 = np.std(arr1), np.std(arr2)
+        if std1 > 0 and std2 > 0:
+            ssim_like = (2 * mean1 * mean2 + 1) / (mean1**2 + mean2**2 + 1) * \
+                       (2 * std1 * std2 + 1) / (std1**2 + std2**2 + 1)
+            similarities.append(abs(ssim_like))
+        
+        # 3. Histogram similarity
+        hist1 = np.histogram(arr1, bins=50, range=(0, 255))[0]
+        hist2 = np.histogram(arr2, bins=50, range=(0, 255))[0]
+        hist_sim = 1 - np.sum(np.abs(hist1 - hist2)) / (2 * np.sum(hist1))
+        similarities.append(hist_sim)
+        
+        # 4. Edge similarity (simplified)
+        edges1 = np.abs(np.gradient(arr1.astype(float))[0]) + np.abs(np.gradient(arr1.astype(float))[1])
+        edges2 = np.abs(np.gradient(arr2.astype(float))[0]) + np.abs(np.gradient(arr2.astype(float))[1])
+        edge_corr = np.corrcoef(edges1.flatten(), edges2.flatten())[0, 1]
+        if not np.isnan(edge_corr):
+            similarities.append((edge_corr + 1) / 2)
+        
+        # Combine similarities with weights
+        if similarities:
+            final_similarity = np.mean(similarities)
+            # Add slight randomness for realism
+            import random
+            final_similarity += random.uniform(-0.05, 0.05)
+            final_similarity = max(0.0, min(1.0, final_similarity))
         else:
-            similarity = (correlation + 1) / 2  # Convert from [-1,1] to [0,1]
+            final_similarity = 0.5
         
-        # Add some randomness to make it more realistic
-        import random
-        similarity += random.uniform(-0.1, 0.1)
-        similarity = max(0.0, min(1.0, similarity))  # Clamp to [0,1]
+        return final_similarity
         
-        return similarity
-    except:
+    except Exception as e:
         # Fallback to random if everything fails
         import random
         return random.uniform(0.3, 0.8)
@@ -96,7 +128,10 @@ def predict_similarity(model, img1, img2, demo_mode=False):
         # Use demo prediction based on actual image similarity
         similarity_score = create_demo_prediction(img1, img2)
         if not hasattr(st.session_state, 'demo_warning_shown'):
-            st.warning("⚠️ **Demo Mode**: Using basic image correlation. Upload the trained model for AI predictions.")
+            if STREAMLIT_CLOUD:
+                st.info("🌐 **Cloud Demo**: Using advanced correlation analysis for signature comparison.")
+            else:
+                st.warning("⚠️ **Demo Mode**: Using basic image correlation. Upload the trained model for AI predictions.")
             st.session_state.demo_warning_shown = True
     else:
         # Make real prediction
@@ -165,12 +200,21 @@ def main():
     demo_mode = model is None
     
     if demo_mode:
-        st.info("""
-        🚧 **Demo Mode Active** 
-        
-        The trained model couldn't be loaded, but you can still explore the interface.
-        In demo mode, basic image correlation is used for similarity scoring.
-        """)
+        if STREAMLIT_CLOUD:
+            st.info("""
+            🌐 **Cloud Demo Mode** 
+            
+            You're using the online demo! This version uses advanced image correlation 
+            algorithms to compare signatures. For full AI predictions, run locally with 
+            the trained model.
+            """)
+        else:
+            st.info("""
+            🚧 **Demo Mode Active** 
+            
+            The trained model couldn't be loaded, but you can still explore the interface.
+            In demo mode, basic image correlation is used for similarity scoring.
+            """)
         # Don't create demo model, just use None and handle in predict function
     
     # Sidebar for mode selection
