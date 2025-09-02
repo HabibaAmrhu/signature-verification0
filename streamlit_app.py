@@ -9,11 +9,11 @@ from datetime import datetime
 
 # Import our 98% accuracy ensemble
 try:
-    from pure_numpy_ensemble import create_demo_prediction
+    from signature_verification import create_demo_prediction
     ENSEMBLE_AVAILABLE = True
 except ImportError:
     ENSEMBLE_AVAILABLE = False
-    st.error("⚠️ Pure Numpy Ensemble not found. Please ensure pure_numpy_ensemble.py is available.")
+    st.error("⚠️ Signature Verification module not found. Please ensure signature_verification.py is available.")
 
 # Detect if running on Streamlit Cloud
 def is_streamlit_cloud():
@@ -48,7 +48,7 @@ def load_ensemble():
         st.warning(f"⚠️ Model loading issue: {str(e)[:100]}... Running in demo mode.")
         return None
 
-# Note: create_demo_prediction is now imported from pure_numpy_ensemble.py
+# Note: create_demo_prediction is now imported from signature_verification.py
 # This provides 98% accuracy using advanced multi-algorithm ensemble
 def old_create_demo_prediction_DISABLED(img1, img2):
     """OLD FUNCTION - REPLACED BY 98% ACCURACY ENSEMBLE"""
