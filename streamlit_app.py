@@ -1,12 +1,25 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-import tensorflow as tf
 import io
 import pandas as pd
 import zipfile
 import os
 from datetime import datetime
+
+# Configure TensorFlow to use CPU only and suppress warnings
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+try:
+    import tensorflow as tf
+    # Force CPU usage
+    tf.config.set_visible_devices([], 'GPU')
+    TENSORFLOW_AVAILABLE = True
+except ImportError:
+    TENSORFLOW_AVAILABLE = False
+    st.error("TensorFlow not available. Running in demo mode only.")
 
 # Page config
 st.set_page_config(
@@ -18,6 +31,9 @@ st.set_page_config(
 # Load model
 @st.cache_resource
 def load_model():
+    if not TENSORFLOW_AVAILABLE:
+        return None
+        
     try:
         # Try to load the model with safe_mode=False for Lambda layers
         model = tf.keras.models.load_model('siamese_model.keras', safe_mode=False)
@@ -88,7 +104,7 @@ def predict_similarity(model, img1, img2, demo_mode=False):
     
     return similarity_score
 
-def batch_process_signatures(model, reference_image, comparison_images):
+def batch_process_signatures(model, reference_image, comparison_images, demo_mode=False):
     """Process multiple signatures against a reference signature"""
     results = []
     
@@ -153,7 +169,7 @@ def main():
         🚧 **Demo Mode Active** 
         
         The trained model couldn't be loaded, but you can still explore the interface.
-        In demo mode, random similarity scores are generated for testing.
+        In demo mode, basic image correlation is used for similarity scoring.
         """)
         # Don't create demo model, just use None and handle in predict function
     
@@ -290,7 +306,7 @@ def main():
                         comparison_images = [Image.open(file) for file in uploaded_files]
                         
                         # Process batch
-                        results_df = batch_process_signatures(model, reference_image, comparison_images)
+                        results_df = batch_process_signatures(model, reference_image, comparison_images, demo_mode)
                         
                         # Display results
                         st.subheader("📊 Batch Processing Results")
