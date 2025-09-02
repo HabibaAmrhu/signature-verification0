@@ -659,8 +659,8 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Application error: {str(e)}")
         st.info("The app is running in demo mode. Some features may be limited.")
-def 
-advanced_signature_preprocessing(image):
+
+def advanced_signature_preprocessing(image):
     """Advanced preprocessing mimicking CNN input preparation"""
     from scipy import ndimage
     
