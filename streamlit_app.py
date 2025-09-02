@@ -70,13 +70,17 @@ def create_demo_prediction(img1, img2):
         import random
         from scipy import ndimage
         
+        # CRITICAL FIX: Check for identical images BEFORE any processing
+        if are_raw_images_identical(img1, img2):
+            return random.uniform(0.95, 0.99)  # Near perfect for identical images
+        
         # Simple but robust preprocessing
         processed1 = simple_robust_preprocessing(img1)
         processed2 = simple_robust_preprocessing(img2)
         
-        # Check if images are identical first
+        # Check if processed images are nearly identical
         if are_images_identical(processed1, processed2):
-            return random.uniform(0.95, 0.99)  # Near perfect for identical images
+            return random.uniform(0.92, 0.97)  # Very high for nearly identical
         
         # Extract reliable signature features
         features1 = extract_reliable_features(processed1)
@@ -685,6 +689,22 @@ def simple_robust_preprocessing(image):
         'original': img_normalized,
         'binary': binary
     }
+
+def are_raw_images_identical(img1, img2):
+    """Check if two raw images are identical or nearly identical BEFORE processing"""
+    try:
+        # Convert both to same format and size for comparison
+        arr1 = np.array(img1.convert('L').resize((200, 200))).astype(np.float32)
+        arr2 = np.array(img2.convert('L').resize((200, 200))).astype(np.float32)
+        
+        # Calculate pixel-wise difference
+        pixel_diff = np.mean(np.abs(arr1 - arr2))
+        
+        # If average pixel difference is very small, they're essentially identical
+        return pixel_diff < 2.0  # Very strict threshold for raw pixel similarity
+        
+    except Exception:
+        return False
 
 def are_images_identical(processed1, processed2):
     """Check if two processed images are essentially identical"""
